@@ -149,3 +149,46 @@ dialog h3 { margin-bottom: 10px; }
 .h-sub { font-size: 12px; color: var(--muted); margin-top: 2px; }
 .badge.win { color: #1e8e4f; border-color: #1e8e4f; }
 .badge.lose { color: var(--muted); }
+
+/* 战术练习 */
+.practice-entry { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.practice-entry h3 { display: flex; align-items: center; gap: 8px; }
+.practice-list { list-style: none; margin: 12px 0; }
+.practice-list li {
+  display: flex; align-items: center; justify-content: space-between; gap: 10px;
+  background: var(--card); border: 1px solid var(--line); border-radius: 12px;
+  padding: 14px 16px; margin-bottom: 10px;
+}
+.practice-list .pl-title { font-weight: 600; }
+.practice-list .pl-sub { font-size: 12px; color: var(--muted); margin-top: 2px; }
+.badge.done { color: #1e8e4f; border-color: #1e8e4f; }
+
+.practice-head { margin-bottom: 8px; }
+.practice-head h2 { margin: 6px 0 2px; }
+#pr-goal.goal { font-size: 14px; line-height: 1.7; }
+.pr-ops { margin: 8px 0 0 18px; color: var(--muted); font-size: 13px; line-height: 1.8; }
+.scoreboard { display: flex; gap: 8px; flex-wrap: wrap; margin: 12px 0; }
+.pr-ap { font-size: 14px; font-weight: 600; margin: 4px 0; }
+.pr-hint { font-size: 13px; color: var(--accent); min-height: 20px; margin-bottom: 4px; }
+#pr-board .node.pending { outline: 2px dashed var(--danger); }
+#pr-board .node.reinforced-target { box-shadow: 0 0 0 2px rgba(46,134,222,.25); }
+#pr-board .node .reinforce-mark { color: var(--accent); }
+.action-bar {
+  position: sticky; bottom: 0; background: var(--bg); padding: 10px 0;
+  border-top: 1px solid var(--line);
+}
+#pr-result.result h3 { margin-bottom: 8px; }
+#pr-result.pass { border-color: #1e8e4f; box-shadow: 0 0 0 2px rgba(30,142,79,.15); }
+#pr-result.fail { border-color: var(--danger); box-shadow: 0 0 0 2px rgba(224,83,61,.12); }
+.pr-scores { display: flex; gap: 16px; flex-wrap: wrap; margin: 8px 0; font-size: 14px; }
+.pr-scores .delta-down { color: var(--danger); font-weight: 600; }
+.pr-scores .delta-up { color: #1e8e4f; font-weight: 600; }
+.pr-lines { margin: 8px 0 0; padding-left: 18px; font-size: 13px; line-height: 1.8; }
+.pick-list { list-style: none; margin: 8px 0; max-height: 50vh; overflow: auto; }
+.pick-list li {
+  border: 1px solid var(--line); border-radius: 8px; padding: 10px 12px; margin-bottom: 8px; cursor: pointer;
+}
+.pick-list li:not(.locked):hover { border-color: var(--accent); background: #fbfaf6; }
+.pick-list li.locked { opacity: 0.45; cursor: not-allowed; }
+.pick-list .pk-word { font-weight: 600; }
+.pick-list .pk-meta { font-size: 12px; color: var(--muted); margin-top: 2px; }

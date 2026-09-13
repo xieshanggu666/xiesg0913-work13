@@ -19,6 +19,14 @@
       a.unshift({ token, roomCode });
       store.history = a.slice(0, 30);
     },
+    // 战术练习通关进度（纯本地）：{ [scenarioId]: { at: 时间戳 } }
+    get practice() { return JSON.parse(localStorage.getItem('wt_practice') || '{}'); },
+    set practice(v) { localStorage.setItem('wt_practice', JSON.stringify(v)); },
+    markPracticeDone(id) {
+      const v = store.practice;
+      v[id] = { at: Date.now() };
+      store.practice = v;
+    },
   };
 
   let ws = null, state = null, prevState = null;
@@ -655,6 +663,233 @@
   };
   $('btn-start').onclick = () => send({ type: 'startGame' });
   $('btn-home').onclick = () => { store.token = null; location.reload(); };
+
+  // ---------- 战术练习（单机，纯前端；进度存本浏览器） ----------
+
+  let prSession = null, prReinforceMode = false;
+
+  function renderPracticeList() {
+    const done = store.practice;
+    $('practice-list').innerHTML = WTPractice.SCENARIOS.map((s, i) => {
+      const isDone = !!done[s.id];
+      return `<li>
+        <div>
+          <div class="pl-title">${esc(s.title)} ${isDone ? '<span class="badge done">已通关</span>' : ''}</div>
+          <div class="pl-sub">${esc(s.subtitle)}</div>
+        </div>
+        <button class="link" data-sid="${i}">${isDone ? '再练一次' : '开始'}</button>
+      </li>`;
+    }).join('');
+    $('practice-list').querySelectorAll('[data-sid]').forEach(btn => {
+      btn.onclick = () => openScenario(WTPractice.SCENARIOS[Number(btn.dataset.sid)].id);
+    });
+  }
+
+  function openScenario(id) {
+    prSession = WTPractice.startSession(id);
+    prReinforceMode = false;
+    const s = prSession.scenario;
+    $('pr-title').textContent = s.title;
+    $('pr-subtitle').textContent = s.subtitle;
+    $('pr-goal').textContent = s.goal;
+    $('pr-ops').innerHTML = s.ops.map(o => `<li>${esc(o)}</li>`).join('');
+    showScreen('practice-game');
+    renderPracticeGame();
+  }
+
+  function renderPracticeGame() {
+    if (!prSession) return;
+    const sc = prSession.scenario;
+
+    // 双方当前分数（提交后即结算分数）
+    const youTotal = prSession.result
+      ? prSession.result.scores.you.after
+      : WTPractice.scoreBreakdown(prSession.nodes, WTPractice.YOU).total;
+    const oppTotal = prSession.result
+      ? prSession.result.scores.opp.after
+      : WTPractice.scoreBreakdown(prSession.nodes, WTPractice.OPP).total;
+    $('pr-scoreboard').innerHTML = WTPractice.PLAYERS.map(p => {
+      const total = p.id === WTPractice.YOU ? youTotal : oppTotal;
+      return `<span class="score-chip active"><span class="dot" style="background:${p.color}"></span>${esc(p.name)} · ${total} 分</span>`;
+    }).join('');
+
+    // 行动点（级联关没有行动点概念，隐藏整行）
+    $('pr-ap').textContent = sc.mode === 'cascade'
+      ? ''
+      : `你的行动点：${prSession.apLeft} / ${sc.ap}`;
+
+    // 操作提示
+    let hint = '';
+    if (!prSession.finished) {
+      if (sc.mode === 'extend') {
+        if (prSession.apLeft > 0) hint = '点下方「接词」选择候选词，接完后「提交答案」结算';
+        else hint = '行动点已用完，点「提交答案」查看结算（也可重置重来）';
+      } else if (sc.mode === 'protect') {
+        if (prReinforceMode) hint = '点击你的一条未加固连接进行加固（再点「加固」取消选择）';
+        else if (prSession.apLeft > 0) hint = '点「加固」选择一条连接，提交后对手会质疑让你失分最多的目标';
+        else hint = '已用掉加固机会，点「提交答案」看对手如何质疑（也可重置重来）';
+      } else if (sc.mode === 'cascade') {
+        const n = prSession.nodes.find(x => x.id === prSession.pendingChallengeId);
+        hint = n ? `已选中要质疑的「${n.word}」，点「提交答案」拆除（再点该词取消）` : '点击对手的一条未加固连接作为质疑目标';
+      }
+    }
+    $('pr-hint').textContent = hint;
+
+    renderPracticeBoard();
+
+    // 按钮可用性
+    $('btn-pr-play').style.display = sc.mode === 'extend' ? '' : 'none';
+    $('btn-pr-reinforce').style.display = sc.mode === 'protect' ? '' : 'none';
+    $('btn-pr-play').disabled = prSession.finished || prSession.apLeft < 1;
+    $('btn-pr-reinforce').disabled = prSession.finished || prSession.apLeft < 1;
+    $('btn-pr-reinforce').textContent = prReinforceMode ? '取消加固' : '加固';
+    $('btn-pr-submit').disabled = prSession.finished ||
+      (sc.mode === 'cascade' && !prSession.pendingChallengeId);
+
+    renderPracticeResult();
+  }
+
+  function renderPracticeBoard() {
+    const sc = prSession.scenario;
+    const colorOf = (ownerId) => {
+      if (!ownerId) return '#999';
+      const p = WTPractice.PLAYERS.find(x => x.id === ownerId);
+      return p ? p.color : '#999';
+    };
+    // 按树形缩进展示（与正式对局同一套结构）
+    const children = new Map();
+    for (const n of prSession.nodes) {
+      const key = n.parentId || '';
+      if (!children.has(key)) children.set(key, []);
+      children.get(key).push(n);
+    }
+    const html = [];
+    const walk = (parentId, depth) => {
+      for (const n of children.get(parentId) || []) {
+        html.push(prNodeHtml(n, depth, colorOf));
+        walk(n.id, depth + 1);
+      }
+    };
+    walk('', 0);
+    $('pr-board').innerHTML = html.join('');
+    $('pr-board').querySelectorAll('.node').forEach(el => {
+      el.onclick = () => prNodeClick(el.dataset.id);
+    });
+  }
+
+  function prNodeHtml(n, depth, colorOf) {
+    const badges = [];
+    if (n.reinforced && n.parentId) badges.push('<span class="badge shield">已加固</span>');
+    if (n.survivedAsRoot) badges.push('<span class="badge shield">幸存根</span>');
+    const classes = ['node'];
+    if (!n.ownerId) classes.push('start');
+    if (prSession.pendingChallengeId === n.id) classes.push('pending');
+    if (prSession.scenario.mode === 'protect' && prReinforceMode &&
+        n.ownerId === WTPractice.YOU && n.parentId && !n.reinforced &&
+        prSession.apLeft > 0 && !prSession.finished) classes.push('reinforced-target');
+    const ownerName = n.ownerId === WTPractice.YOU ? '你' : '对手';
+    const meta = n.ownerId
+      ? `${ownerName} · ${WTPractice.relationName(n.relation)} · ${esc(n.reason || '')}`
+      : '起始词';
+    return `<div class="${classes.join(' ')}" data-id="${n.id}"
+      style="margin-left:${depth * 22}px; border-left-color:${colorOf(n.ownerId)}">
+      <span class="word">${esc(n.word)}</span>
+      <div class="meta">${meta}</div>
+      <div class="badges">${badges.join('')}</div>
+    </div>`;
+  }
+
+  function prNodeClick(nodeId) {
+    if (!prSession || prSession.finished) return;
+    const sc = prSession.scenario;
+    if (sc.mode === 'protect') {
+      if (!prReinforceMode) return;
+      const err = WTPractice.reinforce(prSession, nodeId);
+      if (err) return toast(err);
+      prReinforceMode = false;
+      renderPracticeGame();
+    } else if (sc.mode === 'cascade') {
+      const err = WTPractice.selectChallenge(prSession, nodeId);
+      if (err) return toast(err);
+      renderPracticeGame();
+    }
+  }
+
+  function renderPracticeResult() {
+    const box = $('pr-result');
+    const r = prSession.result;
+    if (!r) { box.classList.add('hidden'); box.innerHTML = ''; return; }
+    const deltaHtml = (s) => {
+      const d = s.after - s.before;
+      const cls = d < 0 ? 'delta-down' : d > 0 ? 'delta-up' : '';
+      const txt = d === 0 ? '不变' : `${d > 0 ? '+' : ''}${d}`;
+      return `<span><span class="dot" style="background:${s.name === '你' ? WTPractice.PLAYERS[0].color : WTPractice.PLAYERS[1].color}"></span>
+        ${esc(s.name)}：${s.before} → ${s.after} 分 <span class="${cls}">(${txt})</span></span>`;
+    };
+    box.className = `card result ${r.passed ? 'pass' : 'fail'}`;
+    box.classList.remove('hidden');
+    box.innerHTML = `<h3>${r.passed ? '✅ 通关！' : '还没达成最优，再想想'}</h3>
+      <div class="pr-scores">${deltaHtml(r.scores.you)}${deltaHtml(r.scores.opp)}</div>
+      <ol class="pr-lines">${r.lines.map(l => `<li>${esc(l)}</li>`).join('')}</ol>`;
+  }
+
+  $('btn-practice').onclick = () => { renderPracticeList(); showScreen('practice'); };
+  $('btn-practice-back').onclick = () => showScreen('home');
+  $('btn-practice-exit').onclick = () => {
+    prSession = null;
+    renderPracticeList();
+    showScreen('practice');
+  };
+
+  $('btn-pr-play').onclick = () => {
+    if (!prSession || prSession.finished) return;
+    const sc = prSession.scenario;
+    $('pr-pick-list').innerHTML = sc.palette.map(m => {
+      const used = prSession.nodes.some(n => n.id === m.id);
+      const unlocked = prSession.nodes.some(n => n.id === m.parent);
+      const locked = used || !unlocked;
+      return `<li class="${locked ? 'locked' : ''}" data-move="${m.id}">
+        <span class="pk-word">「${esc(m.word)}」</span> 接到「${esc(WTPractice.parentWord(sc, m.parent))}」后面
+        <div class="pk-meta">${WTPractice.relationName(m.relation)} · ${esc(m.reason)}${used ? ' · 已在场上' : unlocked ? '' : ' · 前置词还没接上'}</div>
+      </li>`;
+    }).join('');
+    $('pr-pick-list').querySelectorAll('[data-move]').forEach(li => {
+      li.onclick = () => {
+        if (li.classList.contains('locked')) return;
+        const err = WTPractice.playWord(prSession, li.dataset.move);
+        if (err) { toast(err); return; }
+        closeDialog('dlg-practice-pick');
+        renderPracticeGame();
+      };
+    });
+    openDialog('dlg-practice-pick');
+  };
+
+  $('btn-pr-reinforce').onclick = () => {
+    if (!prSession || prSession.finished) return;
+    prReinforceMode = !prReinforceMode;
+    if (prReinforceMode) toast('点击你的一条未加固连接进行加固');
+    renderPracticeGame();
+  };
+
+  $('btn-pr-submit').onclick = () => {
+    if (!prSession || prSession.finished) return;
+    prReinforceMode = false;
+    const r = WTPractice.submit(prSession);
+    if (typeof r === 'string') { toast(r); return; }
+    if (r.passed) {
+      store.markPracticeDone(prSession.scenario.id);
+      toast('通关！进度已保存在本浏览器');
+    }
+    renderPracticeGame();
+  };
+
+  $('btn-pr-reset').onclick = () => {
+    if (!prSession) return;
+    WTPractice.resetSession(prSession);
+    prReinforceMode = false;
+    renderPracticeGame();
+  };
 
   function esc(s) {
     return String(s ?? '').replace(/[&<>"']/g, c =>

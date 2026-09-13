@@ -23,12 +23,54 @@
       </div>
     </div>
     <p id="home-error" class="error"></p>
+    <div class="card practice-entry">
+      <div>
+        <h3>战术练习 <span class="badge shield">单机</span></h3>
+        <p class="hint">不用等朋友：3 个固定局面，练习延长词链、保护关键连接和理解级联拆除。进度保存在本浏览器。</p>
+      </div>
+      <button id="btn-practice" class="primary">进入练习</button>
+    </div>
     <div class="card hidden" id="history-card">
       <h3>历史与战绩</h3>
       <p id="history-stats" class="hint"></p>
       <ul id="history-list"></ul>
       <p class="hint">记录保存在本浏览器中；点「进入 / 回看」凭本机会话重返房间。</p>
     </div>
+  </section>
+
+  <!-- 战术练习：关卡列表 -->
+  <section id="screen-practice" class="screen hidden">
+    <h2>战术练习</h2>
+    <p class="hint">三个固定局面，帮你在取舍之间找到手感。通关进度只保存在本浏览器。</p>
+    <ul id="practice-list" class="practice-list"></ul>
+    <div class="row"><button id="btn-practice-back">返回首页</button></div>
+  </section>
+
+  <!-- 战术练习：对局 -->
+  <section id="screen-practice-game" class="screen hidden">
+    <header class="practice-head">
+      <button id="btn-practice-exit" class="link">← 练习列表</button>
+      <h2 id="pr-title"></h2>
+      <p class="hint" id="pr-subtitle"></p>
+    </header>
+    <div class="card">
+      <h3>目标</h3>
+      <p id="pr-goal" class="goal"></p>
+      <ul id="pr-ops" class="pr-ops"></ul>
+    </div>
+    <div id="pr-scoreboard" class="scoreboard"></div>
+    <div id="pr-ap" class="pr-ap"></div>
+    <div id="pr-hint" class="pr-hint"></div>
+    <div id="pr-board" class="board"></div>
+    <div id="pr-result" class="card result hidden"></div>
+    <footer id="pr-action-bar" class="action-bar">
+      <div class="row">
+        <button id="btn-pr-play" class="primary">接词</button>
+        <button id="btn-pr-reinforce">加固</button>
+        <button id="btn-pr-submit" class="primary">提交答案</button>
+        <button id="btn-pr-reset">重置</button>
+      </div>
+    </footer>
   </section>
 
   <!-- 大厅 -->
@@ -114,6 +156,14 @@
   </section>
 </div>
 
+<!-- 战术练习：候选词选择 -->
+<dialog id="dlg-practice-pick">
+  <h3>选择要接的词</h3>
+  <p class="hint">灰色选项需要先把它前面的词接到场上。</p>
+  <ul id="pr-pick-list" class="pick-list"></ul>
+  <div class="row"><button data-close>取消</button></div>
+</dialog>
+
 <!-- 接词弹窗 -->
 <dialog id="dlg-play">
   <h3>接词</h3>
@@ -183,6 +233,7 @@
 <div id="toast-wrap"></div>
 <script src="tips.js"></script>
 <script src="rules.js"></script>
+<script src="practice.js"></script>
 <script src="client.js"></script>
 </body>
 </html>
