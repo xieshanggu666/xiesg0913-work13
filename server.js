@@ -9,7 +9,10 @@ const game = require('./game');
 
 const PORT = process.env.PORT || 8080;
 const DATA_DIR = path.join(__dirname, 'data');
-const DATA_FILE = path.join(DATA_DIR, 'rooms.json');
+// 测试可用 WT_DATA_FILE 指定独立存档，避免污染开发用的 data/rooms.json
+const DATA_FILE = process.env.WT_DATA_FILE
+  ? path.resolve(process.env.WT_DATA_FILE)
+  : path.join(DATA_DIR, 'rooms.json');
 const PUBLIC_DIR = path.join(__dirname, 'public');
 
 // ---------- 房间存储 ----------
@@ -61,7 +64,7 @@ function saveRooms() {
   clearTimeout(saveTimer);
   saveTimer = setTimeout(() => {
     try {
-      fs.mkdirSync(DATA_DIR, { recursive: true });
+      fs.mkdirSync(path.dirname(DATA_FILE), { recursive: true });
       // 结束的房间只保留回放/结算所需的玩家与日志，不持久化观战者；
       // 观战是临时身份，重启后本就不可恢复，避免旧观战记录残留在线名单。
       const persistedRooms = [...rooms.values()].map(r =>
@@ -415,7 +418,41 @@ wss.on('connection', (ws) => {
   ws.on('close', () => { if (ctx.playerId) detachSocket(ctx.playerId, ws); });
 });
 
-loadRooms();
-server.listen(PORT, () => {
-  console.log(`词语领地服务器已启动: http://localhost:${PORT}`);
-});
+// ---------- 启动 / 停止 ----------
+// 默认直接运行时照常监听 8080；测试可 require 本模块后在临时端口上自启、跑完即停，
+// 这样 `node --test`（会执行 test/ 下所有 .js，含 e2e.js）不再依赖外部先启动服务器。
+
+function startServer(port = PORT) {
+  return new Promise((resolve) => {
+    loadRooms();
+    server.listen(port, () => {
+      const addr = server.address();
+      resolve({ server, port: typeof addr === 'object' && addr ? addr.port : port, stop: stopServer });
+    });
+  });
+}
+
+function stopServer() {
+  // 停掉所有定时器，避免保存防抖/回合/观战清理等句柄让进程挂住
+  clearTimeout(saveTimer);
+  for (const t of turnTimers.values()) clearTimeout(t);
+  for (const t of spectatorPruneTimers.values()) clearTimeout(t);
+  turnTimers.clear();
+  spectatorPruneTimers.clear();
+  return new Promise((resolve) => {
+      wss.close(() => server.close(() => resolve()));
+      // wss.close 只等正常关闭；强制终结仍在打开的连接（e2e 里有 ws.close 竞态）
+      for (const client of wss.clients) {
+        try { client.terminate(); } catch { /* 已关闭 */ }
+      }
+    });
+}
+
+module.exports = { startServer, stopServer };
+
+// 仅在被直接执行时启动服务（被测试 require 时不自启、不占用 8080）
+if (require.main === module) {
+  startServer(PORT).then(({ port }) => {
+    console.log(`词语领地服务器已启动: http://localhost:${port}`);
+  });
+}

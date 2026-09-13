@@ -57,9 +57,13 @@ npm start          # http://localhost:8080
 ## 测试
 
 ```bash
-npm test           # 核心规则单元测试（node:test）
-npm run test:e2e   # 端到端冒烟：建房→对局→质疑→重连→观战→结算→回放（需先启动服务器）
+npm test           # 核心规则单元测试 + 自包含端到端冒烟（node:test，无需先启动服务器）
+npm run test:e2e   # 单独运行端到端冒烟：进程内在临时端口自启服务器、用临时存档，跑完即停
 ```
+
+> 端到端测试是自包含的：`node --test` 会执行 `test/` 下的所有 `.js`（含 `e2e.js`），
+> e2e 会 require `server.js` 在系统分配的空闲端口上启动服务、使用系统临时目录中的存档，
+> 结束后自动关闭并清理——不占用/冲突 8080，也不污染 `data/rooms.json`。
 
 ## 已实现
 

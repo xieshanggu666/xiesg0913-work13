@@ -1,10 +1,19 @@
 'use strict';
-// 端到端冒烟测试：两名玩家建房→加入→开局→接词→质疑→裁定→断线重连→结算→回放
+// 端到端冒烟测试：两名玩家建房→加入→开局→接词→质疑→裁定→断线重连→观战→结算→回放。
+// 自包含：require 服务器后在临时端口（0 = 系统分配）与临时存档上启动，跑完即停，
+// 因此 `npm test`（node --test 会执行 test/ 下所有 .js，包括本文件）无需先手动启动服务器，
+// 也不会与 8080 上正在运行的开发服务器冲突、不会污染 data/rooms.json。
 const WebSocket = require('ws');
 const fs = require('fs');
+const os = require('os');
 const path = require('path');
 
-const URL = 'ws://localhost:8080';
+// 必须在 require 服务器之前设置：server.js 加载时读取存档路径
+const DATA_FILE = path.join(os.tmpdir(), `wt-e2e-${process.pid}-${Date.now()}.json`);
+process.env.WT_DATA_FILE = DATA_FILE;
+const { startServer, stopServer } = require('../server');
+
+let BASE_URL = '';   // 服务器监听后由 main() 填入实际端口
 let failures = 0;
 function check(name, cond) {
   console.log(`${cond ? '✓' : '✗'} ${name}`);
@@ -12,7 +21,9 @@ function check(name, cond) {
 }
 
 function client(name) {
-  const c = { name, ws: new WebSocket(URL), state: null, token: null, msgs: [] };
+  const c = { name, ws: new WebSocket(BASE_URL), state: null, token: null, msgs: [] };
+  // 关闭阶段的竞态错误（连接被服务端 terminate）不应让进程崩溃
+  c.ws.on('error', () => {});
   c.send = (m) => c.ws.send(JSON.stringify(m));
   c.ws.on('message', (raw) => {
     const msg = JSON.parse(raw);
@@ -33,7 +44,11 @@ function client(name) {
 
 const sleep = (ms) => new Promise(r => setTimeout(r, ms));
 
-(async () => {
+async function main() {
+  // 端口 0：系统分配空闲端口，避免与正在运行的开发服务器（8080）冲突
+  const { port } = await startServer(0);
+  BASE_URL = `ws://localhost:${port}`;
+
   const A = client('甲');
   await A.opened;
   A.send({ type: 'createRoom', name: '甲' });
@@ -237,7 +252,7 @@ const sleep = (ms) => new Promise(r => setTimeout(r, ms));
 
   // 落盘：结束的房间不带观战者与观战 token，旧观战记录不残留
   await sleep(500); // 等 300ms 防抖落盘
-  const data = JSON.parse(fs.readFileSync(path.join(__dirname, '..', 'data', 'rooms.json'), 'utf8'));
+  const data = JSON.parse(fs.readFileSync(DATA_FILE, 'utf8'));
   const ended = data.rooms.find(r => r.code === code);
   check('结束房间落盘不含观战者', Array.isArray(ended.spectators) && ended.spectators.length === 0);
   check('结束房间落盘不含观战 token',
@@ -268,5 +283,19 @@ const sleep = (ms) => new Promise(r => setTimeout(r, ms));
 
   A2.ws.close(); B2.ws.close(); C.ws.close(); S3b.ws.close();
   console.log(failures === 0 ? '\n全部通过' : `\n${failures} 项失败`);
-  process.exit(failures === 0 ? 0 : 1);
-})().catch(e => { console.error('冒烟测试异常:', e.message); process.exit(1); });
+}
+
+(async () => {
+  let exitCode = 0;
+  try {
+    await main();
+    if (failures !== 0) exitCode = 1;
+  } catch (e) {
+    console.error('冒烟测试异常:', e.stack || e.message);
+    exitCode = 1;
+  } finally {
+    await stopServer();
+    try { fs.rmSync(DATA_FILE, { force: true }); } catch { /* 忽略 */ }
+  }
+  process.exit(exitCode);
+})();
