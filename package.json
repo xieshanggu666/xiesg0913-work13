@@ -1,0 +1,17 @@
+{
+  "name": "word-territory",
+  "version": "1.0.0",
+  "main": "index.js",
+  "scripts": {
+    "start": "node server.js",
+    "test": "node --test",
+    "test:e2e": "node test/e2e.js"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "description": "朋友联机的词语领地游戏",
+  "dependencies": {
+    "ws": "^8.21.3"
+  }
+}

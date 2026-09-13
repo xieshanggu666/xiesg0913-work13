@@ -1,0 +1,188 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>词语领地</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<div id="app">
+
+  <!-- 首页：创建 / 加入 -->
+  <section id="screen-home" class="screen">
+    <h1>词语领地</h1>
+    <p class="tagline">接词成链，连链成地。朋友联机 · 房主裁定 · 扩张还是加固？</p>
+    <div class="card">
+      <label>你的昵称 <input id="inp-name" maxlength="12" placeholder="例如：小词"></label>
+      <div class="row">
+        <button id="btn-create" class="primary">创建房间</button>
+        <input id="inp-code" maxlength="4" placeholder="房间码">
+        <button id="btn-join">加入</button>
+        <button id="btn-spectate">观战</button>
+      </div>
+    </div>
+    <p id="home-error" class="error"></p>
+    <div class="card hidden" id="history-card">
+      <h3>历史与战绩</h3>
+      <p id="history-stats" class="hint"></p>
+      <ul id="history-list"></ul>
+      <p class="hint">记录保存在本浏览器中；点「进入 / 回看」凭本机会话重返房间。</p>
+    </div>
+  </section>
+
+  <!-- 大厅 -->
+  <section id="screen-lobby" class="screen hidden">
+    <h2>房间 <span id="lobby-code" class="code"></span></h2>
+    <p class="hint">把房间码告诉朋友，他们就能加入。断线刷新页面即可自动回来。</p>
+    <div class="card">
+      <h3>玩家（<span id="lobby-count"></span>/6）</h3>
+      <ul id="lobby-players" class="players"></ul>
+      <ul id="lobby-spectators" class="players spectators"></ul>
+    </div>
+    <div class="card" id="rules-card">
+      <h3>本局规则 <button id="btn-edit-rules" class="link hidden">修改</button></h3>
+      <div id="rules-summary"></div>
+      <div id="rules-editor" class="hidden">
+        <fieldset>
+          <legend>允许的关系类型</legend>
+          <div id="rules-relations"></div>
+          <p class="field-error" id="err-rule-relations"></p>
+        </fieldset>
+        <label><input type="checkbox" id="rule-proper"> 允许专有名词（人名/地名/品牌）</label>
+        <label>解释最少字数 <input type="number" id="rule-minlen" min="0" max="50"></label>
+        <p class="field-error" id="err-rule-minlen"></p>
+        <label>每回合秒数 <input type="number" id="rule-seconds" min="30" max="300"></label>
+        <p class="field-error" id="err-rule-seconds"></p>
+        <label>每回合行动点 <input type="number" id="rule-ap" min="1" max="6"></label>
+        <p class="field-error" id="err-rule-ap"></p>
+        <label>每人回合数 <input type="number" id="rule-rounds" min="1" max="10"></label>
+        <p class="field-error" id="err-rule-rounds"></p>
+        <label>每人质疑次数 <input type="number" id="rule-tokens" min="0" max="9"></label>
+        <p class="field-error" id="err-rule-tokens"></p>
+        <p class="field-error" id="err-rules-general"></p>
+        <div class="row">
+          <button id="btn-save-rules" class="primary">保存规则</button>
+          <button id="btn-cancel-rules">取消</button>
+        </div>
+      </div>
+    </div>
+    <button id="btn-start" class="primary big hidden">开始游戏</button>
+    <p class="hint" id="lobby-wait">等待房主开始…</p>
+    <div class="row"><button id="btn-exit-spectate" class="hidden">退出观战</button></div>
+  </section>
+
+  <!-- 对局 -->
+  <section id="screen-game" class="screen hidden">
+    <header id="game-header">
+      <div id="turn-info"></div>
+      <div id="timer-wrap"><div id="timer-bar"></div><span id="timer-text"></span></div>
+      <div class="row">
+        <button id="btn-rules-view" class="link">规则</button>
+        <button id="btn-replay" class="link hidden">回放</button>
+      </div>
+    </header>
+    <div id="scoreboard"></div>
+    <div id="spectator-banner" class="hidden">
+      <span>👁 观战模式：你正在只读观看，不能接词、加固、质疑或更改规则。</span>
+      <button id="btn-exit-spectate2" class="link">退出观战</button>
+    </div>
+    <div id="challenge-banner" class="hidden">
+      <span id="challenge-banner-text"></span>
+      <button id="btn-goto-judge" class="primary hidden">去裁定</button>
+    </div>
+    <div id="board" class="board"></div>
+    <footer id="action-bar">
+      <div id="ap-info"></div>
+      <div class="row" id="action-row">
+        <button id="btn-play" class="primary">接词</button>
+        <button id="btn-reinforce">加固</button>
+        <button id="btn-endturn">结束回合</button>
+      </div>
+    </footer>
+  </section>
+
+  <!-- 结算 -->
+  <section id="screen-end" class="screen hidden">
+    <h2 id="end-title">结算</h2>
+    <div id="end-scores" class="card"></div>
+    <div class="row">
+      <button id="btn-replay2" class="primary">回放本局</button>
+      <button id="btn-home">回到首页</button>
+      <button id="btn-exit-spectate3" class="hidden">退出观战</button>
+    </div>
+  </section>
+</div>
+
+<!-- 接词弹窗 -->
+<dialog id="dlg-play">
+  <h3>接词</h3>
+  <p>连接到：<b id="play-parent"></b></p>
+  <label>新词 <input id="play-word" maxlength="12"></label>
+  <label>关系
+    <select id="play-relation"></select>
+  </label>
+  <label>解释（它与前词的关系）
+    <textarea id="play-reason" rows="2" placeholder="例如：苹果是水果的一种"></textarea>
+  </label>
+  <p class="hint" id="play-minlen"></p>
+  <div class="row">
+    <button id="play-submit" class="primary">提交（1 行动点）</button>
+    <button data-close>取消</button>
+  </div>
+</dialog>
+
+<!-- 质疑弹窗（发起者确认） -->
+<dialog id="dlg-challenge">
+  <h3>发起质疑</h3>
+  <p id="challenge-target"></p>
+  <p>质疑会消耗 1 次质疑机会，由裁定者依据本局规则判定该连接是否成立。</p>
+  <div class="row">
+    <button id="challenge-submit" class="danger">确认质疑</button>
+    <button data-close>算了</button>
+  </div>
+</dialog>
+
+<!-- 裁定弹窗（裁定者） -->
+<dialog id="dlg-judge">
+  <h3>请你裁定</h3>
+  <div id="judge-detail"></div>
+  <div id="judge-rules" class="rules-box"></div>
+  <div class="row">
+    <button id="judge-uphold" class="danger">质疑成立（拆除）</button>
+    <button id="judge-reject" class="primary">质疑不成立（保留）</button>
+  </div>
+</dialog>
+
+<!-- 规则查看 -->
+<dialog id="dlg-rules">
+  <h3>本局规则</h3>
+  <div id="rules-view"></div>
+  <div class="row"><button data-close class="primary">知道了</button></div>
+</dialog>
+
+<!-- 回放 -->
+<dialog id="dlg-replay">
+  <h3>局面回放</h3>
+  <div id="replay-label" class="hint"></div>
+  <div id="replay-board" class="board small"></div>
+  <div class="row">
+    <button id="replay-prev">上一步</button>
+    <span id="replay-pos"></span>
+    <button id="replay-next">下一步</button>
+    <button data-close>关闭</button>
+  </div>
+</dialog>
+
+<!-- 教学提示 -->
+<div id="tip-box" class="hidden">
+  <div id="tip-text"></div>
+  <button id="tip-ok">知道了</button>
+</div>
+
+<div id="toast-wrap"></div>
+<script src="tips.js"></script>
+<script src="rules.js"></script>
+<script src="client.js"></script>
+</body>
+</html>
